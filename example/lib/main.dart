@@ -20,13 +20,32 @@ class _ReaderExampleAppState extends State<ReaderExampleApp> {
   @override
   void initState() {
     super.initState();
+
+    // Escucha las lecturas del lector
     ReaderPlugin.onScanData.listen((rawData) async {
       final parsed = ColombianIDParser.parse(rawData);
-      final csv =
-          "${parsed['nombre']},${parsed['numero_documento']},${parsed['fecha_nacimiento']}";
-      await Clipboard.setData(ClipboardData(text: csv));
+
+      final tipo = parsed['tipo'] ?? '';
+      final numero = parsed['numero_documento'] ?? '';
+      final apellidos = parsed['apellidos'] ?? '';
+      final nombres = parsed['nombres'] ?? '';
+      final fecha = parsed['fecha_nacimiento'] ?? '';
+
+      // Texto formateado en el orden solicitado
+      final textoCopiar = '''
+Tipo de documento: $tipo
+Número de documento: $numero
+Apellidos: $apellidos
+Nombres: $nombres
+Fecha de nacimiento: $fecha
+'''.trim();
+
+      // Copiar al portapapeles
+      await Clipboard.setData(ClipboardData(text: textoCopiar));
+
+      // Mostrar en pantalla lo que se copió
       setState(() {
-        _lastScan = "Copiado al portapapeles:\n$csv";
+        _lastScan = "Copiado al portapapeles:\n\n$textoCopiar";
       });
     });
   }
@@ -47,7 +66,7 @@ class _ReaderExampleAppState extends State<ReaderExampleApp> {
             children: [
               Text(
                 _lastScan,
-                textAlign: TextAlign.center,
+                textAlign: TextAlign.left,
                 style: const TextStyle(fontSize: 16),
               ),
               const SizedBox(height: 30),
