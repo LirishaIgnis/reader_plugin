@@ -220,42 +220,16 @@ static Map<String, String> parseCedulaAntiguaAdaptativa(String s) {
         .trim();
   }
 
-  // --- 3️⃣ Parser unificado (misma lógica de búsqueda de apellido y documento) ---
+  // --- 3️⃣ Parser unificado ---
   Map<String, String> parseCedulaBase(String data) {
     String cleaned = limpiarTrama(data);
 
-    // Buscar primer apellido (3+ letras mayúsculas)
-    final apellidoRegex = RegExp(r'\b([A-ZÑ]{3,})\b');
-    final apellidoMatch = apellidoRegex.firstMatch(cleaned);
-    String primerApellido = '';
-    if (apellidoMatch != null) {
-      primerApellido = apellidoMatch.group(1)!;
-    }
-
-    // Buscar los 10 dígitos inmediatamente anteriores al apellido
-    String numeroDocumento = '';
-    if (apellidoMatch != null) {
-      int start = apellidoMatch.start;
-      int from = (start - 20).clamp(0, cleaned.length);
-      String before = cleaned.substring(from, start);
-
-      final digitsMatch = RegExp(r'(\d{8,11})').allMatches(before).toList();
-      if (digitsMatch.isNotEmpty) {
-        String raw = digitsMatch.last.group(1)!;
-        // Aplicar regla: si los dos primeros son 00 → documento de 8 dígitos
-        if (raw.length >= 10 && raw.startsWith('00')) {
-          numeroDocumento = raw.substring(2, 10);
-        } else {
-          numeroDocumento = raw;
-        }
-      }
-    }
-
-    // Buscar estructura de nombres (igual algoritmo que validamos)
+    // Regex unificado para nombres y apellidos
     final nameRegex = RegExp(
         r'([A-ZÑ]{3,})\s+([A-ZÑ]{3,})\s+([A-ZÑ]{3,})(?:\s+([A-ZÑ]{3,}))?(?:\s+([A-ZÑ]{3,}))?');
     final nameMatch = nameRegex.firstMatch(cleaned);
 
+    String primerApellido = nameMatch?.group(1) ?? '';
     String segundoApellido = nameMatch?.group(2) ?? '';
     List<String> nombresList = [];
     for (int i = 3; i <= 5; i++) {
@@ -264,7 +238,25 @@ static Map<String, String> parseCedulaAntiguaAdaptativa(String s) {
     }
     String nombres = nombresList.join(' ');
 
-    // Buscar datos complementarios (género, fecha, RH)
+    // Buscar los 10 dígitos inmediatamente anteriores al primer apellido
+    String numeroDocumento = '';
+    if (primerApellido.isNotEmpty) {
+      int start = cleaned.indexOf(primerApellido);
+      int from = (start - 20).clamp(0, cleaned.length);
+      String before = cleaned.substring(from, start);
+
+      final digitsMatch = RegExp(r'(\d{8,11})').allMatches(before).toList();
+      if (digitsMatch.isNotEmpty) {
+        String raw = digitsMatch.last.group(1)!;
+        if (raw.length >= 10 && raw.startsWith('00')) {
+          numeroDocumento = raw.substring(2, 10);
+        } else {
+          numeroDocumento = raw;
+        }
+      }
+    }
+
+    // Buscar datos complementarios (género, fecha nacimiento, RH)
     final infoRegex = RegExp(r'0([MF])(\d{4})(\d{2})(\d{2}).*?([ABO]{1,2}\+?)');
     final infoMatch = infoRegex.firstMatch(cleaned);
 
@@ -296,6 +288,7 @@ static Map<String, String> parseCedulaAntiguaAdaptativa(String s) {
   bool reciente = esTramaReciente(s);
   return parseCedulaBase(s);
 }
+
 
 
   // ---------- Utilidades ----------
