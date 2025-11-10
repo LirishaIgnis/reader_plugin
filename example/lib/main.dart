@@ -23,7 +23,7 @@ class _ReaderExampleAppState extends State<ReaderExampleApp> {
 
     // Escucha las lecturas del lector
     ReaderPlugin.onScanData.listen((rawData) async {
-      // 📟 Mostrar en consola lo que llega directamente desde la tablet
+      // Mostrar en consola lo que llega directamente desde la tablet
       print("=== DATO CRUDO DEL LECTOR ===");
       print(rawData);
       print("=== FIN DATO CRUDO ===\n");
@@ -31,7 +31,7 @@ class _ReaderExampleAppState extends State<ReaderExampleApp> {
       // Procesar con el parser
       final parsed = ColombianIDParser.parse(rawData);
 
-      // 📘 Mostrar en consola el resultado del parseo
+      // Mostrar en consola el resultado del parseo
       print("=== RESULTADO PARSEADO ===");
       parsed.forEach((key, value) {
         print("$key: $value");

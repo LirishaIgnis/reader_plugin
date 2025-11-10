@@ -205,14 +205,14 @@ class ColombianIDParser {
   /// ---------- Nuevo algoritmo corregido para Cédula Antigua ----------
 // ------------------- Parser adaptativo Cédula Antigua -------------------
 static Map<String, String> parseCedulaAntiguaAdaptativa(String s) {
-  // --- 1️⃣ Detectar tipo de trama ---
+  // --- Detectar tipo de trama ---
   bool esTramaReciente(String data) {
     if (data.contains('PUBDSK') || data.contains('PubDSK_1')) return true;
     if (data.length > 800) return true;
     return false;
   }
 
-  // --- 2️⃣ Limpieza controlada ---
+  // --- Limpieza controlada ---
   String limpiarTrama(String data) {
     return data
         .replaceAll(RegExp(r'[^A-Z0-9Ñ\+ ]', caseSensitive: false), ' ')
@@ -220,7 +220,7 @@ static Map<String, String> parseCedulaAntiguaAdaptativa(String s) {
         .trim();
   }
 
-  // --- 3️⃣ Parser unificado ---
+  // ---  Parser unificado ---
   Map<String, String> parseCedulaBase(String data) {
     String cleaned = limpiarTrama(data);
 
@@ -238,25 +238,37 @@ static Map<String, String> parseCedulaAntiguaAdaptativa(String s) {
     }
     String nombres = nombresList.join(' ');
 
-    // Buscar los 10 dígitos inmediatamente anteriores al primer apellido
+    // ---  NUEVO ALGORITMO DETECCIÓN DOCUMENTO  ---
     String numeroDocumento = '';
     if (primerApellido.isNotEmpty) {
-      int start = cleaned.indexOf(primerApellido);
-      int from = (start - 20).clamp(0, cleaned.length);
-      String before = cleaned.substring(from, start);
+      //  Buscar el apellido dentro del texto
+      int idxApellido = cleaned.indexOf(primerApellido);
+      if (idxApellido > 0) {
+        //  Tomar hasta 20 caracteres antes del apellido
+        int from = (idxApellido - 20).clamp(0, cleaned.length);
+        String antesApellido = cleaned.substring(from, idxApellido);
 
-      final digitsMatch = RegExp(r'(\d{8,11})').allMatches(before).toList();
-      if (digitsMatch.isNotEmpty) {
-        String raw = digitsMatch.last.group(1)!;
-        if (raw.length >= 10 && raw.startsWith('00')) {
-          numeroDocumento = raw.substring(2, 10);
-        } else {
-          numeroDocumento = raw;
+        //  Buscar el bloque de dígitos justo ANTES del apellido
+        final match = RegExp(r'(\d{1,10})$').firstMatch(antesApellido);
+        if (match != null) {
+          String rawNum = match.group(1)!;
+
+          //  Si tiene más de 10, cortar solo los 10 últimos
+          if (rawNum.length > 10) {
+            rawNum = rawNum.substring(rawNum.length - 10);
+          }
+
+          //  Regla de los “00”: si comienza con "00" -> eliminar los dos primeros
+          if (rawNum.length >= 10 && rawNum.startsWith('00')) {
+            rawNum = rawNum.substring(2, 10);
+          }
+
+          numeroDocumento = rawNum;
         }
       }
     }
 
-    // Buscar datos complementarios (género, fecha nacimiento, RH)
+    // --- Datos complementarios ---
     final infoRegex = RegExp(r'0([MF])(\d{4})(\d{2})(\d{2}).*?([ABO]{1,2}\+?)');
     final infoMatch = infoRegex.firstMatch(cleaned);
 
@@ -284,10 +296,11 @@ static Map<String, String> parseCedulaAntiguaAdaptativa(String s) {
     };
   }
 
-  // --- 4️⃣ Determinar qué versión de trama es y procesar ---
+  // --- Determinar qué versión de trama es y procesar ---
   bool reciente = esTramaReciente(s);
   return parseCedulaBase(s);
 }
+
 
 
 
