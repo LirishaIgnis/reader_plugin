@@ -6,7 +6,7 @@
 class ColombianIDParser {
   /// Procesa la trama del lector y retorna los datos estructurados
   static Map<String, String> parse(String raw) {
-    // ⚠️ Ya no limpiamos la trama; solo verificamos longitud
+    //  No limpiamos la trama; solo verificamos longitud
     if (raw == null || raw.isEmpty) return _empty();
 
     final String s = raw; // usar directamente la trama original
@@ -58,10 +58,7 @@ class ColombianIDParser {
     // Cédula antigua (trama larga sin OCR)
     if (len > 200 && !f_ocr) return parseCedulaAntiguaAdaptativa(s);
 
-    //Fallback heurístico
-    //final docMatch = RegExp(r'\b\d{9,11}\b').firstMatch(s);
-    //if (docMatch != null) return _parseCedulaAntiguaHeuristica(s);
-
+  
     return _empty();
   }
 
@@ -166,44 +163,71 @@ class ColombianIDParser {
   }
 
   // ---------- Tarjeta Identidad ----------
-  static Map<String, String> _parseTarjetaIdentidad(String s) {
-    String clean = s.replaceAll('<', ' ');
-    String cedula = '';
-    if (clean.length >= 50) {
-      if (clean[48] == '0' && clean[49] == '0') {
-        cedula = _readDigitsFrom(clean, 50);
-      } else {
-        cedula = _readDigitsFrom(clean, 48);
+
+static Map<String, String> _parseTarjetaIdentidad(String s) {
+  final Map<String, String> data = _empty();
+
+  // Normalizamos texto para evitar errores de detección
+  final textoCompleto = s.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+
+  // --- Buscar primer apellido ---
+  // Asumimos que los apellidos están en mayúsculas y seguidos por nombre(s)
+  final regexApellido = RegExp(r'[A-Z]{3,}');
+  final matchPrimerApellido = regexApellido.firstMatch(textoCompleto);
+  final primerApellido = matchPrimerApellido?.group(0) ?? '';
+
+  // --- Detectar número de documento ---
+  String numeroDocumento = '';
+  if (primerApellido.isNotEmpty) {
+    // Busca hasta 10 dígitos inmediatamente antes del primer apellido
+    final regexNumero = RegExp(r'(\d{1,10})' + primerApellido);
+    final matchNumero = regexNumero.firstMatch(textoCompleto);
+
+    if (matchNumero != null) {
+      numeroDocumento = matchNumero.group(1)!;
+
+      // Si hay más de 10 dígitos, tomar solo los últimos 10
+      if (numeroDocumento.length > 10) {
+        numeroDocumento = numeroDocumento.substring(numeroDocumento.length - 10);
       }
-    } else {
-      final m = RegExp(r'\b\d{6,11}\b').firstMatch(clean);
-      cedula = m?.group(0) ?? '';
-    }
 
-    final words = clean.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-    String apellidos = '', nombres = '';
-    if (words.length >= 4) {
-      apellidos = '${words[0]} ${words[1]}';
-      nombres = words.skip(2).take(2).join(' ');
-    } else if (words.length >= 2) {
-      apellidos = words[0];
-      nombres = words.skip(1).join(' ');
+      // Si empieza con '00' y tiene 10 dígitos, eliminar los dos primeros ceros
+      if (numeroDocumento.startsWith('00') && numeroDocumento.length == 10) {
+        numeroDocumento = numeroDocumento.substring(2);
+      }
     }
-
-    return {
-      'tipo': 'TarjetaIdentidad',
-      'numero_documento': cedula,
-      'nombres': nombres.trim(),
-      'apellidos': apellidos.trim(),
-      'fecha_nacimiento': '',
-      'sexo': '',
-      'pais': 'COL',
-      'nombre': '$apellidos $nombres'.trim()
-    };
   }
 
-  /// ---------- Nuevo algoritmo corregido para Cédula Antigua ----------
-// ------------------- Parser adaptativo Cédula Antigua -------------------
+  // --- Extraer segundo apellido y nombre (si aplica) ---
+  // Se buscan las siguientes secuencias de letras después del primer apellido
+  String segundoApellido = '';
+  String nombres = '';
+
+  if (matchPrimerApellido != null) {
+    final resto = textoCompleto.substring(matchPrimerApellido.end);
+    final matches = RegExp(r'[A-Z]{3,}').allMatches(resto).toList();
+
+    if (matches.isNotEmpty) {
+      segundoApellido = matches.first.group(0)!;
+      if (matches.length > 1) {
+        nombres = matches.sublist(1).map((m) => m.group(0)!).join(' ');
+      }
+    }
+  }
+
+  // --- Llenar datos detectados ---
+  data['tipo'] = 'Tarjeta de Identidad';
+  data['numero'] = numeroDocumento;
+  data['primer_apellido'] = primerApellido;
+  data['segundo_apellido'] = segundoApellido;
+  data['nombres'] = nombres;
+
+  return data;
+}
+
+
+  /// ---------- Nuevo algoritmo adaptativo corregido para Cédula Antigua ----------
+
 static Map<String, String> parseCedulaAntiguaAdaptativa(String s) {
   // --- Detectar tipo de trama ---
   bool esTramaReciente(String data) {
