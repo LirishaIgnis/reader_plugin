@@ -6,7 +6,7 @@
 class ColombianIDParser {
   /// Procesa la trama del lector y retorna los datos estructurados
   static Map<String, String> parse(String raw) {
-    //  No limpiamos la trama; solo verificamos longitud
+    // ⚠️ Ya no limpiamos la trama; solo verificamos longitud
     if (raw == null || raw.isEmpty) return _empty();
 
     final String s = raw; // usar directamente la trama original
@@ -163,67 +163,107 @@ class ColombianIDParser {
   }
 
   // ---------- Tarjeta Identidad ----------
-
 static Map<String, String> _parseTarjetaIdentidad(String s) {
-  final Map<String, String> data = _empty();
-
-  // Normalizamos texto para evitar errores de detección
-  final textoCompleto = s.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  // --- Normalización de caracteres ---
+  // Corrige Ñ y elimina caracteres invisibles o de control
+  String normalized = s
+      .replaceAll(RegExp(r'Ã‘|Ã±|Ñ|ñ', caseSensitive: false), 'Ñ') // todas las variantes a Ñ
+      .replaceAll(RegExp(r'[^A-Z0-9Ñ\+\s]', caseSensitive: false), ' ') // limpia ruido
+      .replaceAll(RegExp(r'[\u0000-\u001F\u007F]', caseSensitive: false), ' ') // borra invisibles
+      .replaceAll(RegExp(r'\s+'), ' ') // colapsa múltiples espacios
+      .trim();
 
   // --- Buscar primer apellido ---
-  // Asumimos que los apellidos están en mayúsculas y seguidos por nombre(s)
-  final regexApellido = RegExp(r'[A-Z]{3,}');
-  final matchPrimerApellido = regexApellido.firstMatch(textoCompleto);
-  final primerApellido = matchPrimerApellido?.group(0) ?? '';
+  final apellidoRegex = RegExp(r'\b[A-ZÑ]{3,}\b');
+  final apellidoMatch = apellidoRegex.firstMatch(normalized);
+  if (apellidoMatch == null) {
+    return {'error': 'No se encontró el primer apellido'};
+  }
 
-  // --- Detectar número de documento ---
+  int apellidoIndex = apellidoMatch.start;
+  String primerApellido = apellidoMatch.group(0)!;
+
+  // --- Buscar número de documento inmediatamente anterior al apellido ---
+  String anterior = normalized.substring(0, apellidoIndex).replaceAll(' ', '');
+  final docRegex = RegExp(r'(\d{8,10})$');
+  final docMatch = docRegex.firstMatch(anterior);
+
   String numeroDocumento = '';
-  if (primerApellido.isNotEmpty) {
-    // Busca hasta 10 dígitos inmediatamente antes del primer apellido
-    final regexNumero = RegExp(r'(\d{1,10})' + primerApellido);
-    final matchNumero = regexNumero.firstMatch(textoCompleto);
-
-    if (matchNumero != null) {
-      numeroDocumento = matchNumero.group(1)!;
-
-      // Si hay más de 10 dígitos, tomar solo los últimos 10
-      if (numeroDocumento.length > 10) {
-        numeroDocumento = numeroDocumento.substring(numeroDocumento.length - 10);
-      }
-
-      // Si empieza con '00' y tiene 10 dígitos, eliminar los dos primeros ceros
-      if (numeroDocumento.startsWith('00') && numeroDocumento.length == 10) {
-        numeroDocumento = numeroDocumento.substring(2);
-      }
+  if (docMatch != null) {
+    numeroDocumento = docMatch.group(0)!;
+    if (numeroDocumento.length > 10) {
+      numeroDocumento = numeroDocumento.substring(numeroDocumento.length - 10);
+    }
+    if (numeroDocumento.startsWith('00') && numeroDocumento.length == 10) {
+      numeroDocumento = numeroDocumento.substring(2);
     }
   }
 
-  // --- Extraer segundo apellido y nombre (si aplica) ---
-  // Se buscan las siguientes secuencias de letras después del primer apellido
+  // --- Buscar segundo apellido y nombres ---
   String segundoApellido = '';
   String nombres = '';
 
-  if (matchPrimerApellido != null) {
-    final resto = textoCompleto.substring(matchPrimerApellido.end);
-    final matches = RegExp(r'[A-Z]{3,}').allMatches(resto).toList();
-
-    if (matches.isNotEmpty) {
-      segundoApellido = matches.first.group(0)!;
-      if (matches.length > 1) {
-        nombres = matches.sublist(1).map((m) => m.group(0)!).join(' ');
-      }
-    }
+  // Dividir texto en tokens válidos (manteniendo Ñ)
+  final tokenRegex = RegExp(r'[A-ZÑ]{2,}', caseSensitive: true);
+  final tokens = <Map<String, dynamic>>[];
+  for (final m in tokenRegex.allMatches(normalized)) {
+    tokens.add({'text': m.group(0)!, 'start': m.start, 'end': m.end});
   }
 
-  // --- Llenar datos detectados ---
-  data['tipo'] = 'Tarjeta de Identidad';
-  data['numero'] = numeroDocumento;
-  data['primer_apellido'] = primerApellido;
-  data['segundo_apellido'] = segundoApellido;
-  data['nombres'] = nombres;
+  // Localizar el índice del primer apellido
+  int tokenIdx = tokens.indexWhere((t) => t['start'] == apellidoIndex);
+  if (tokenIdx == -1) {
+    tokenIdx = tokens.lastIndexWhere((t) => t['text'] == primerApellido);
+  }
 
-  return data;
+  if (tokenIdx != -1) {
+    // Segundo apellido: siguiente token (si cumple longitud)
+    if (tokenIdx + 1 < tokens.length && tokens[tokenIdx + 1]['text'].length >= 3) {
+      segundoApellido = tokens[tokenIdx + 1]['text'];
+    }
+
+    // Nombres: todo lo que sigue hasta encontrar un token que empiece con número o "0M"/"0F"
+    final nombresList = <String>[];
+    int startIdx = segundoApellido.isNotEmpty ? tokenIdx + 2 : tokenIdx + 1;
+
+    for (int i = startIdx; i < tokens.length; i++) {
+      final t = tokens[i]['text'] as String;
+      if (RegExp(r'^[0-9]|^0[MF]').hasMatch(t)) break;
+      if (t.length <= 2) break; // evita siglas tipo "IE"
+      if (!RegExp(r'[AEIOUÑ]').hasMatch(t)) break; // corta cuando no hay vocales (bloque binario)
+      nombresList.add(t);
+    }
+    nombres = nombresList.join(' ');
+  }
+
+  // --- Buscar información de género, fecha y RH ---
+  final infoRegex = RegExp(r'0([MF])(\d{4})(\d{2})(\d{2}).*?([ABO]{1,2}\+?)');
+  final infoMatch = infoRegex.firstMatch(normalized);
+
+  String genero = infoMatch?.group(1) ?? '';
+  String fechaNacimiento = '';
+  if (infoMatch != null) {
+    fechaNacimiento =
+        '${infoMatch.group(2)}-${infoMatch.group(3)}-${infoMatch.group(4)}';
+  }
+  String rh = infoMatch?.group(5) ?? '';
+
+  final apellidos = '$primerApellido $segundoApellido'.trim();
+  final nombreCompleto = '$apellidos $nombres'.trim();
+
+  return {
+    'tipo': 'TarjetaIdentidad',
+    'numero_documento': numeroDocumento,
+    'nombres': nombres,
+    'apellidos': apellidos,
+    'fecha_nacimiento': fechaNacimiento,
+    'sexo': genero,
+    'pais': 'COL',
+    'nombre': nombreCompleto,
+    'rh': rh,
+  };
 }
+
 
 
   /// ---------- Nuevo algoritmo adaptativo corregido para Cédula Antigua ----------
