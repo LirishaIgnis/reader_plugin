@@ -162,15 +162,18 @@ class ColombianIDParser {
     return result;
   }
 
-  // ---------- Tarjeta Identidad ----------
+// ---------- Tarjeta Identidad ----------
 static Map<String, String> _parseTarjetaIdentidad(String s) {
-  // --- Normalización de caracteres ---
-  // Corrige Ñ y elimina caracteres invisibles o de control
+  // --- Normalización y limpieza ---
   String normalized = s
-      .replaceAll(RegExp(r'Ã‘|Ã±|Ñ|ñ|�', caseSensitive: false), 'Ñ') // todas las variantes a Ñ
-      .replaceAll(RegExp(r'[^A-Z0-9Ñ\+\s]', caseSensitive: false), ' ') // limpia ruido
-      .replaceAll(RegExp(r'[\u0000-\u001F\u007F]', caseSensitive: false), ' ') // borra invisibles
-      .replaceAll(RegExp(r'\s+'), ' ') // colapsa múltiples espacios
+      .replaceAll(RegExp(r'Ã‘|Ã±', caseSensitive: false), 'Ñ')
+      .replaceAll(RegExp(r'ñ', caseSensitive: false), 'Ñ')
+      .replaceAllMapped(RegExp(r'(?<=[A-Z])�(?=[A-Z])'), (m) => 'Ñ')
+      .replaceAll('�', ' ')
+      // Filtro extendido: elimina bytes binarios, caracteres de control y símbolos
+      .replaceAll(RegExp(r'[^A-Z0-9Ñ\+\s]', caseSensitive: false), ' ')
+      .replaceAll(RegExp(r'[\u0000-\u001F\u007F-\u00A0]', caseSensitive: false), ' ')
+      .replaceAll(RegExp(r'\s{2,}'), ' ')
       .trim();
 
   // --- Buscar primer apellido ---
@@ -183,7 +186,7 @@ static Map<String, String> _parseTarjetaIdentidad(String s) {
   int apellidoIndex = apellidoMatch.start;
   String primerApellido = apellidoMatch.group(0)!;
 
-  // --- Buscar número de documento inmediatamente anterior al apellido ---
+  // --- Buscar número de documento ---
   String anterior = normalized.substring(0, apellidoIndex).replaceAll(' ', '');
   final docRegex = RegExp(r'(\d{8,10})$');
   final docMatch = docRegex.firstMatch(anterior);
@@ -203,40 +206,40 @@ static Map<String, String> _parseTarjetaIdentidad(String s) {
   String segundoApellido = '';
   String nombres = '';
 
-  // Dividir texto en tokens válidos (manteniendo Ñ)
   final tokenRegex = RegExp(r'[A-ZÑ]{2,}', caseSensitive: true);
   final tokens = <Map<String, dynamic>>[];
   for (final m in tokenRegex.allMatches(normalized)) {
     tokens.add({'text': m.group(0)!, 'start': m.start, 'end': m.end});
   }
 
-  // Localizar el índice del primer apellido
   int tokenIdx = tokens.indexWhere((t) => t['start'] == apellidoIndex);
   if (tokenIdx == -1) {
     tokenIdx = tokens.lastIndexWhere((t) => t['text'] == primerApellido);
   }
 
   if (tokenIdx != -1) {
-    // Segundo apellido: siguiente token (si cumple longitud)
     if (tokenIdx + 1 < tokens.length && tokens[tokenIdx + 1]['text'].length >= 3) {
       segundoApellido = tokens[tokenIdx + 1]['text'];
     }
 
-    // Nombres: todo lo que sigue hasta encontrar un token que empiece con número o "0M"/"0F"
     final nombresList = <String>[];
     int startIdx = segundoApellido.isNotEmpty ? tokenIdx + 2 : tokenIdx + 1;
 
     for (int i = startIdx; i < tokens.length; i++) {
       final t = tokens[i]['text'] as String;
+
+      // --- Nuevas condiciones para cortar ---
       if (RegExp(r'^[0-9]|^0[MF]').hasMatch(t)) break;
-      if (t.length <= 2) break; // evita siglas tipo "IE"
-      if (!RegExp(r'[AEIOUÑ]').hasMatch(t)) break; // corta cuando no hay vocales (bloque binario)
+      if (t.length <= 2) break;
+      if (!RegExp(r'[AEIOU]').hasMatch(t)) break; // Debe contener vocal
+      if (t.contains(RegExp(r'Ñ[^AEIOUÑ]$'))) break; // evita combos tipo RÑM
       nombresList.add(t);
     }
+
     nombres = nombresList.join(' ');
   }
 
-  // --- Buscar información de género, fecha y RH ---
+  // --- Buscar info adicional ---
   final infoRegex = RegExp(r'0([MF])(\d{4})(\d{2})(\d{2}).*?([ABO]{1,2}\+?)');
   final infoMatch = infoRegex.firstMatch(normalized);
 
@@ -251,7 +254,8 @@ static Map<String, String> _parseTarjetaIdentidad(String s) {
   final apellidos = '$primerApellido $segundoApellido'.trim();
   final nombreCompleto = '$apellidos $nombres'.trim();
 
-  return {
+  // --- Limpieza final ---
+  Map<String, String> resultado = {
     'tipo': 'TarjetaIdentidad',
     'numero_documento': numeroDocumento,
     'nombres': nombres,
@@ -262,9 +266,16 @@ static Map<String, String> _parseTarjetaIdentidad(String s) {
     'nombre': nombreCompleto,
     'rh': rh,
   };
+
+  resultado.updateAll((k, v) {
+    return v
+        .replaceAll(RegExp(r'[^\wÑ\s\+\-]', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  });
+
+  return resultado;
 }
-
-
 
   /// ---------- Nuevo algoritmo adaptativo corregido para Cédula Antigua ----------
 
