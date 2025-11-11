@@ -167,7 +167,7 @@ static Map<String, String> _parseTarjetaIdentidad(String s) {
   // --- Normalización de caracteres ---
   // Corrige Ñ y elimina caracteres invisibles o de control
   String normalized = s
-      .replaceAll(RegExp(r'Ã‘|Ã±|Ñ|ñ', caseSensitive: false), 'Ñ') // todas las variantes a Ñ
+      .replaceAll(RegExp(r'Ã‘|Ã±|Ñ|ñ|�', caseSensitive: false), 'Ñ') // todas las variantes a Ñ
       .replaceAll(RegExp(r'[^A-Z0-9Ñ\+\s]', caseSensitive: false), ' ') // limpia ruido
       .replaceAll(RegExp(r'[\u0000-\u001F\u007F]', caseSensitive: false), ' ') // borra invisibles
       .replaceAll(RegExp(r'\s+'), ' ') // colapsa múltiples espacios
@@ -276,53 +276,104 @@ static Map<String, String> parseCedulaAntiguaAdaptativa(String s) {
     return false;
   }
 
-  // --- Limpieza controlada ---
+  // --- Limpieza controlada y robusta ---
   String limpiarTrama(String data) {
     return data
-        .replaceAll(RegExp(r'[^A-Z0-9Ñ\+ ]', caseSensitive: false), ' ')
+        // Corrige Ñ rotas (casos Ã‘, Ã±)
+        .replaceAll(RegExp(r'Ã‘|Ã±|Ñ|ñ|�', caseSensitive: false), 'Ñ')
+        // Sustituye cualquier carácter no válido por espacio
+        .replaceAll(RegExp(r'[^A-Z0-9Ñ\+\s]', caseSensitive: false), ' ')
+        // Elimina caracteres invisibles o de control
+        .replaceAll(RegExp(r'[\u0000-\u001F\u007F]', caseSensitive: false), ' ')
+        // Colapsa múltiples espacios en uno solo
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }
 
-  // ---  Parser unificado ---
+  // --- Parser unificado ---
   Map<String, String> parseCedulaBase(String data) {
     String cleaned = limpiarTrama(data);
 
-    // Regex unificado para nombres y apellidos
+    // --- Extracción flexible de nombres y apellidos ---
+    // Intento 1: patrón clásico (funciona en la mayoría de casos)
     final nameRegex = RegExp(
-        r'([A-ZÑ]{3,})\s+([A-ZÑ]{3,})\s+([A-ZÑ]{3,})(?:\s+([A-ZÑ]{3,}))?(?:\s+([A-ZÑ]{3,}))?');
+      r'([A-ZÑ]{2,})\s+([A-ZÑ]{2,})\s+([A-ZÑ]{2,})(?:\s+([A-ZÑ]{2,}))?(?:\s+([A-ZÑ]{2,}))?'
+    );
     final nameMatch = nameRegex.firstMatch(cleaned);
 
     String primerApellido = nameMatch?.group(1) ?? '';
     String segundoApellido = nameMatch?.group(2) ?? '';
     List<String> nombresList = [];
+
     for (int i = 3; i <= 5; i++) {
       final val = nameMatch?.group(i);
       if (val != null) nombresList.add(val);
     }
-    String nombres = nombresList.join(' ');
 
-    // ---  NUEVO ALGORITMO DETECCIÓN DOCUMENTO  ---
+    // --- Si no se encontró nada útil, usa un fallback tokenizado ---
+    if (primerApellido.isEmpty) {
+      final tokenRegex = RegExp(r'[A-ZÑ]{2,}', caseSensitive: true);
+      final tokens = <String>[];
+      for (final m in tokenRegex.allMatches(cleaned)) {
+        final token = m.group(0)!;
+        // Filtra bloques sin vocales o con longitud mínima
+        if (token.length >= 2 && RegExp(r'[AEIOUÑ]').hasMatch(token)) {
+          tokens.add(token);
+        }
+      }
+      if (tokens.length >= 2) {
+        primerApellido = tokens[0];
+        segundoApellido = tokens.length > 1 ? tokens[1] : '';
+        if (tokens.length > 2) {
+          nombresList = tokens.sublist(2);
+        }
+      }
+    }
+
+  // --- Limpieza adicional: extender nombres hasta encontrar tokens no válidos ---
+final tokens = cleaned.split(RegExp(r'\s+')).map((e) => {'text': e}).toList();
+int tokenIdx = tokens.indexWhere((t) => t['text'] == segundoApellido);
+if (tokenIdx != -1) {
+  int startIdx = segundoApellido.isNotEmpty ? tokenIdx + 2 : tokenIdx + 1;
+  for (int i = startIdx; i < tokens.length; i++) {
+    final t = tokens[i]['text'] as String;
+
+    // Detener si encontramos un patrón que no parece nombre
+    if (RegExp(r'^[0-9]|^0[MF]').hasMatch(t)) break;
+    if (t.length <= 2) break; // evita siglas tipo "IE"
+    if (!RegExp(r'[AEIOUÑ]').hasMatch(t)) break; // corta cuando no hay vocales (bloque binario)
+
+    if (!nombresList.contains(t)) {
+  nombresList.add(t);
+}
+
+  }
+}
+
+String nombres = nombresList.join(' ');
+
+
+    // --- NUEVO ALGORITMO DETECCIÓN DOCUMENTO ---
     String numeroDocumento = '';
     if (primerApellido.isNotEmpty) {
-      //  Buscar el apellido dentro del texto
+      // Buscar el apellido dentro del texto
       int idxApellido = cleaned.indexOf(primerApellido);
       if (idxApellido > 0) {
-        //  Tomar hasta 20 caracteres antes del apellido
+        // Tomar hasta 20 caracteres antes del apellido
         int from = (idxApellido - 20).clamp(0, cleaned.length);
         String antesApellido = cleaned.substring(from, idxApellido);
 
-        //  Buscar el bloque de dígitos justo ANTES del apellido
+        // Buscar el bloque de dígitos justo ANTES del apellido
         final match = RegExp(r'(\d{1,10})$').firstMatch(antesApellido);
         if (match != null) {
           String rawNum = match.group(1)!;
 
-          //  Si tiene más de 10, cortar solo los 10 últimos
+          // Si tiene más de 10, cortar solo los 10 últimos
           if (rawNum.length > 10) {
             rawNum = rawNum.substring(rawNum.length - 10);
           }
 
-          //  Regla de los “00”: si comienza con "00" -> eliminar los dos primeros
+          // Regla de los “00”: si comienza con "00" -> eliminar los dos primeros
           if (rawNum.length >= 10 && rawNum.startsWith('00')) {
             rawNum = rawNum.substring(2, 10);
           }
