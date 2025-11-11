@@ -277,7 +277,7 @@ static Map<String, String> _parseTarjetaIdentidad(String s) {
   return resultado;
 }
 
-  /// ---------- Nuevo algoritmo adaptativo corregido para Cédula Antigua ----------
+  /// ---------- Algoritmo adaptativo para Cédula Antigua ----------
 
 static Map<String, String> parseCedulaAntiguaAdaptativa(String s) {
   // --- Detectar tipo de trama ---
