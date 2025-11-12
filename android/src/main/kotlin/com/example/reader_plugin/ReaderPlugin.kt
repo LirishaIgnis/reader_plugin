@@ -14,7 +14,7 @@ import io.flutter.plugin.common.MethodChannel
 
 /** 
  * ReaderPlugin
- * 
+ * Version 1.0 de control del lector tablet Colpensiones
  * Este plugin conecta el entorno nativo de Android con Flutter.
  * Se encarga de iniciar el escáner de códigos y de recibir los datos escaneados
  * mediante broadcast intents del sistema.
