@@ -36,7 +36,7 @@ class ReaderPlugin: FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel
   private var receiver: BroadcastReceiver? = null
 
   // --------------------------------------------------------------------------
-  // 1️⃣ Se ejecuta cuando el plugin se conecta con el motor de Flutter
+  // Se ejecuta cuando el plugin se conecta con el motor de Flutter
   // --------------------------------------------------------------------------
   override fun onAttachedToEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
     // Obtiene el contexto de la aplicación
@@ -52,7 +52,7 @@ class ReaderPlugin: FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel
   }
 
   // --------------------------------------------------------------------------
-  // 2️⃣ Manejo de llamadas de métodos desde Flutter
+  // Manejo de llamadas de métodos desde Flutter
   // --------------------------------------------------------------------------
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: MethodChannel.Result) {
     when (call.method) {
@@ -67,7 +67,7 @@ class ReaderPlugin: FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel
   }
 
   // --------------------------------------------------------------------------
-  // 3️⃣ Método que envía un broadcast al sistema para iniciar el escáner
+  //  Método que envía un broadcast al sistema para iniciar el escáner
   // --------------------------------------------------------------------------
   private fun startScan() {
     try {
@@ -88,7 +88,7 @@ class ReaderPlugin: FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel
   }
 
   // --------------------------------------------------------------------------
-  // 4️⃣ Se ejecuta cuando Flutter empieza a escuchar eventos del plugin
+  // Se ejecuta cuando Flutter empieza a escuchar eventos del plugin
   // --------------------------------------------------------------------------
   override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
     eventSink = events
@@ -96,7 +96,7 @@ class ReaderPlugin: FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel
   }
 
   // --------------------------------------------------------------------------
-  // 5️⃣ Se ejecuta cuando Flutter deja de escuchar eventos
+  // Se ejecuta cuando Flutter deja de escuchar eventos
   // --------------------------------------------------------------------------
   override fun onCancel(arguments: Any?) {
     unregisterReceiver() // Se desregistra el receptor
@@ -104,7 +104,7 @@ class ReaderPlugin: FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel
   }
 
   // --------------------------------------------------------------------------
-  // 6️⃣ Registra un BroadcastReceiver para escuchar los datos escaneados
+  // Registra un BroadcastReceiver para escuchar los datos escaneados
   // --------------------------------------------------------------------------
   private fun registerReceiver() {
     // Si ya hay un receptor registrado, no hace nada
@@ -135,7 +135,7 @@ class ReaderPlugin: FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel
   }
 
   // --------------------------------------------------------------------------
-  // 7️⃣ Desregistra el BroadcastReceiver cuando ya no se necesita
+  // Desregistra el BroadcastReceiver cuando ya no se necesita
   // --------------------------------------------------------------------------
   private fun unregisterReceiver() {
     try {
@@ -150,7 +150,7 @@ class ReaderPlugin: FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel
   }
 
   // --------------------------------------------------------------------------
-  // 8️⃣ Se ejecuta cuando el plugin se desconecta del motor de Flutter
+  //  Se ejecuta cuando el plugin se desconecta del motor de Flutter
   // --------------------------------------------------------------------------
   override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
     // Limpia los handlers y canales
