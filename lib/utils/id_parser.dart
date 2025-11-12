@@ -1,5 +1,5 @@
 // lib/utils/id_parser.dart
-// Parser que replica la lógica y offsets del LectorBarrasAON_FS205.cs (C#)
+// Parser que replica la lógica y offsets del Lector Barras AONFS205
 // Este archivo se encarga de interpretar las tramas que envía el lector físico,
 // extrayendo información útil (nombre, apellidos, número, fecha, etc.) según el tipo de documento.
 
@@ -362,7 +362,7 @@ class ColombianIDParser {
 
       String nombres = nombresList.join(' ');
 
-      // Busca número de documento antes del apellido
+      // Busca número de documento antes del primer  apellido
       String numeroDocumento = '';
       if (primerApellido.isNotEmpty) {
         int idxApellido = cleaned.indexOf(primerApellido);
