@@ -228,7 +228,7 @@ static Map<String, String> _parseTarjetaIdentidad(String s) {
     for (int i = startIdx; i < tokens.length; i++) {
       final t = tokens[i]['text'] as String;
 
-      // --- Nuevas condiciones para cortar ---
+      // --- Nuevas condiciones para evitar ruido por normalizacion de la Ñ ---
       if (RegExp(r'^[0-9]|^0[MF]').hasMatch(t)) break;
       if (t.length <= 2) break;
       if (!RegExp(r'[AEIOU]').hasMatch(t)) break; // Debe contener vocal
@@ -306,7 +306,7 @@ static Map<String, String> parseCedulaAntiguaAdaptativa(String s) {
     String cleaned = limpiarTrama(data);
 
     // --- Extracción flexible de nombres y apellidos ---
-    // Intento 1: patrón clásico (funciona en la mayoría de casos)
+    // Intento 1: patrón RegExp (funciona en la mayoría de casos)
     final nameRegex = RegExp(
       r'([A-ZÑ]{2,})\s+([A-ZÑ]{2,})\s+([A-ZÑ]{2,})(?:\s+([A-ZÑ]{2,}))?(?:\s+([A-ZÑ]{2,}))?'
     );
@@ -341,7 +341,7 @@ static Map<String, String> parseCedulaAntiguaAdaptativa(String s) {
       }
     }
 
-  // --- Limpieza adicional: extender nombres hasta encontrar tokens no válidos ---
+  // --- Limpieza adicional: Revisar nombres hasta encontrar tokens no válidos ---
 final tokens = cleaned.split(RegExp(r'\s+')).map((e) => {'text': e}).toList();
 int tokenIdx = tokens.indexWhere((t) => t['text'] == segundoApellido);
 if (tokenIdx != -1) {
@@ -364,7 +364,7 @@ if (tokenIdx != -1) {
 String nombres = nombresList.join(' ');
 
 
-    // --- NUEVO ALGORITMO DETECCIÓN DOCUMENTO ---
+    // --- ALGORITMO DETECCIÓN DOCUMENTO (Cedula antigua por exceso de ruido requiere más detalle ) ---
     String numeroDocumento = '';
     if (primerApellido.isNotEmpty) {
       // Buscar el apellido dentro del texto
